@@ -10,7 +10,7 @@ from openpyxl.styles import Alignment
 
 
 
-pdf_dir = 'USCG_Exams_4_Aug_2020'
+pdf_dir = 'PDF'
 
 
 def get_files_iter(files_dir):
