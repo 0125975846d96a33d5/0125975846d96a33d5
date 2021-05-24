@@ -425,7 +425,7 @@ def main(pdf_dir, verbose=False):
             error = e.__class__.__name__
             msg = f'{__name__}, parser: {file.name}: {error}'
             logging.exception(msg)
-            raise
+
     try:
         output(pdf_dir, DATA, STATS)
     except Exception as e:
