@@ -10,7 +10,7 @@ from openpyxl.styles import Alignment
 
 
 
-pdf_dir = 'PDF'
+pdf_dir = 'USCG_Exams_4_Aug_2020'
 
 
 def get_files_iter(files_dir):
@@ -181,7 +181,8 @@ def fetch_codes_exract_images(pdf_obj, illustrations_dir):
 
 def fetch_questions_answers(DATA, pdf_obj, file,
                             expected_pages_illustrs,
-                            ans_tokens, illustr_codes):
+                            ans_tokens, illustr_codes,
+                            illustrations_dir):
     """ Fetches Questions and corresponding answers
     as data rows.
     -> None
@@ -300,7 +301,7 @@ def parser(file, DATA, STATS, illustrations_dir,
 
     fetched_questions_amount = fetch_questions_answers(
         DATA, pdf_obj, file, expected_pages_illustrs,
-        ans_tokens, illustr_codes)
+        ans_tokens, illustr_codes, illustrations_dir)
 
     ROW = {}
     ROW['FILENAME'] = file.name
@@ -424,7 +425,7 @@ def main(pdf_dir, verbose=False):
             error = e.__class__.__name__
             msg = f'{__name__}, parser: {file.name}: {error}'
             logging.exception(msg)
-            
+            raise
     try:
         output(pdf_dir, DATA, STATS)
     except Exception as e:
