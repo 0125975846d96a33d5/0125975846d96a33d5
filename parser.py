@@ -383,7 +383,8 @@ def output(pdf_dir, DATA, STATS):
 
     data_output__xlsx_filename = (
         f'{len(DATA["rows"])}_rows_{pdf_dir}_parsed.xlsx')
-    columns_width = {h: 90 for h in 'BCDEF'}
+    columns_width = {h: 95 for h in 'CDEFG'}
+    columns_width.update({'A': 40, 'H':20})
     xlsx_out(data_output__xlsx_filename, DATA, columns_width)
 
     stats_output_filename = (
