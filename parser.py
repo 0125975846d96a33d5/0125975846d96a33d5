@@ -53,13 +53,31 @@ def get_expected_illustr(page_text, illustr_line_idx=3):
 
 
 def fetch_illustr_title(text, match_limit=None):
-    """
+    """ Matches illustrations codes: BL-0010, D016SA, etc.
     -> str
     """
     pattern = r'(?=[^\s]*|\s{1})[A-Z]{1,2}-{0,1}[0-9]{3,4}[A-Z]{0,2}'
     fetched_codes = [c.strip() for c in re.findall(pattern, text)
         if len(c.strip()) in [6, 7]]
-    return ';'.join(fetched_codes[:match_limit])
+    return fetched_codes[:match_limit]
+
+
+def extract_image(image_path, page, image_coor=None,
+                  resolution=150):
+    """ Extract a image as .png file,
+    with a given illustration code name.
+    -> None
+    """
+    if image_coor is None:
+        image = page.images[-1]
+        image_coor = (
+            image['x0'], page.height - image['y1'],
+            image['x1'], page.height - image['y0'])
+
+    image_crop = page.crop(image_coor)
+    image_obj = image_crop.to_image(
+        resolution=resolution)
+    image_obj.save(image_path, format="PNG")
 
 
 def fix_excel_corrupts_values(value):
@@ -98,26 +116,32 @@ def is_answer_header_line(line, ans_tokens):
     return False
 
 
-def fix_degrees_chr(text):
-    """
+def replace_chrs(text, chrs):
+    """ Multiple replaces.
+    args:
+        ...
+        chrs = ((r1, r2), (r1, r2), ...)
     -> str
     """
-    text = text.replace(' o F', '°F')
+    for _chr, new_chr in chrs:
+        text = text.replace(_chr, new_chr)
+    return text
+
+
+def fix_degrees_chr(text):
+    """ Replaces characters stylized as
+    special ones, with actual special
+    characters.
+    -> str
+    """
+    chrs = ((' o F', ' °F'), (' oF', ' °F'))
+    text = replace_chrs(text, chrs)
     degrees_match = re.findall(r'[\s-]{1}\d{1,4}o{1}',
                                text)
     if degrees_match:
         for degree_value in degrees_match:
             page_text = text.replace(
                 degree_value, degree_value[:-1] + '°')
-    return text
-
-
-def replace_chrs(text, chrs):
-    """
-    -> str
-    """
-    for _chr, new_chr in chrs:
-        text = text.replace(_chr, new_chr)
     return text
 
 
@@ -142,6 +166,7 @@ def fetch_codes_exract_images(pdf_obj, illustrations_dir):
             page_text = page.extract_text()
 
             illustr_title = fetch_illustr_title(page_text, match_limit=1)
+            illustr_title = ';'.join(illustr_title)
             
             illustr_codes.append(illustr_title)
             same_codes_amount = illustr_codes.count(illustr_title)
@@ -154,24 +179,15 @@ def fetch_codes_exract_images(pdf_obj, illustrations_dir):
             if os.path.exists(image_path):
                 ilustrs_fetched += 1
                 continue
-            
-            illustr_images = page.images
-            if len(illustr_images) == 3:
-                image = page.images[-1]
-                image_coor = (image['x0'], page.height - image['y1'],
-                              image['x1'], page.height - image['y0'])
 
-                image_crop = page.crop(image_coor)
-                image_obj = image_crop.to_image(resolution=150)
-                image_obj.save(image_path, format="PNG")
-
+            if len(page.images) == 3:
+                extract_image(image_path, page)
                 ilustrs_fetched += 1
+                
             else:
                 image_coor = (0, 95, page.width, page.height - 55)
-                image_crop = page.crop(image_coor)
-                image_obj = image_crop.to_image(resolution=200)
-                image_obj.save(image_path, format="PNG")
-
+                extract_image(image_path, page, image_coor,
+                              resolution=150)
                 ilustrs_fetched += 1
                 
     return (illustr_codes,
@@ -203,7 +219,6 @@ def fetch_questions_answers(DATA, pdf_obj, file,
         
         lines = [l.strip() for l in page_text.split('\n')
                  if l.strip() and l.strip() != 'o']
-        
         for line_idx, line in enumerate(lines):
             
             match = re.findall(r'\d{1,3}\.\s{1}', line)
@@ -236,33 +251,25 @@ def fetch_questions_answers(DATA, pdf_obj, file,
                         for col in ['ANS A', 'ANS B', 'ANS C', 'ANS D']:
                             ROW[col] =  fix_excel_corrupts_values(ROW[col])
 
-                        ill_match = {
+                        illustr_match = {
                             c for c in illustr_codes if c in ROW['QUESTION']}
-                        if ill_match:
-                            ROW['ILLUSTRATION'] = ';'.join(ill_match)
+                        if illustr_match:
+                            ROW['ILLUSTRATION'] = ';'.join(illustr_match)
                         else:
-                            ROW['ILLUSTRATION'] = 'null'
+                            ROW['ILLUSTRATION'] = None
 
-                        pattern = r'\s{1}[A-Z]{1,2}-{0,1}[0-9]{3,4}[A-Z]{0,2}'
-                        fetched_codes = [
-                            c.strip() for c in re.findall(
-                                pattern, ROW['QUESTION'])]
-                        
-                        if fetched_codes and ROW['ILLUSTRATION'] == 'null':
+                        # extracts images inserted within text Q\A data.
+                        fetched_codes = fetch_illustr_title(
+                            ROW['QUESTION'].replace('\n', ''))
+
+                        if fetched_codes and ROW['ILLUSTRATION'] is None:
                             ROW['ILLUSTRATION'] = ';'.join(fetched_codes)
 
                             if page.images:
-                                image = page.images[-1]
-                                image_coor = (
-                                    image['x0'], page.height - image['y1'],
-                                    image['x1'], page.height - image['y0'])
-
-                                image_crop = page.crop(image_coor)
-                                image_obj = image_crop.to_image(resolution=150)
                                 image_filename = f"{ROW['ILLUSTRATION']}.png"
                                 image_path = os.path.join(
                                     illustrations_dir, image_filename)
-                                image_obj.save(image_path, format="PNG")
+                                extract_image(image_path, page)
 
                         fetched_questions_amount += 1
                         DATA['rows'].append(ROW)
@@ -397,7 +404,7 @@ def main(pdf_dir, verbose=False):
                         'FETCHED QUESTIONS']
 
     DATA = defaultdict(list)
-    DATA['headers'] = ['ANS', 'QUESTION',
+    DATA['headers'] = ['FILENAME','ANS', 'QUESTION',
                        'ANS A', 'ANS B', 'ANS C',
                        'ANS D', 'ILLUSTRATION']
 
@@ -424,6 +431,10 @@ def main(pdf_dir, verbose=False):
         except Exception as e:
             error = e.__class__.__name__
             msg = f'{__name__}, parser: {file.name}: {error}'
+            
+            if verbose:
+                print(f'Error: {msg}')
+                
             logging.exception(msg)
 
     try:
@@ -431,8 +442,12 @@ def main(pdf_dir, verbose=False):
     except Exception as e:
         error = e.__class__.__name__
         msg = f'{__name__}, output: {file.name}: {error}'
+        
+        if verbose:
+                print(f'Error: {msg}')
+                
         logging.exception(msg)
-
+        
 
 
 
